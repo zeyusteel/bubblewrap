@@ -487,6 +487,7 @@ monitor_child (int event_fd, pid_t child_pid, int setup_finished_fd)
   if (setup_finished_fd != -1)
     dont_close[j++] = setup_finished_fd;
   assert (j < sizeof(dont_close)/sizeof(*dont_close));
+  //关闭当前进程除了0,1,2与dont_close中的fd
   fdwalk (proc_fd, close_extra_fds, dont_close);
 
   sigemptyset (&mask);
@@ -811,15 +812,22 @@ acquire_privs (void)
 {
   uid_t euid, new_fsuid;
 
+  //获取euid
   euid = geteuid ();
 
   /* Are we setuid ? */
-  if (real_uid != euid)
+  if (real_uid != euid) 
     {
+      //该程序文件调用了setuid,并且setuid和ruid不等,(euid = 0)
       if (euid != 0)
         die ("Unexpected setuid user %d, should be 0", euid);
-
+      //设置特权标志
       is_privileged = TRUE;
+      /* clone操作之前保证以euid=0运行,保证clone的命名空间的拥有者是root,这样
+       * 其他用户无法用ptrace追踪，clone之后会完全以当前用户运行
+       * 但是不希望在clone前滥用euid=0的权限所以,通过setfsuid将文件系统权限收缩回real_uid
+       */
+      
       /* We want to keep running as euid=0 until at the clone()
        * operation because doing so will make the user namespace be
        * owned by root, which makes it not ptrace:able by the user as
@@ -833,27 +841,29 @@ acquire_privs (void)
        */
       if (setfsuid (real_uid) < 0)
         die_with_error ("Unable to set fsuid");
-
+      //检查setfsuid是否调用成功
       /* setfsuid can't properly report errors, check that it worked (as per manpage) */
       new_fsuid = setfsuid (-1);
       if (new_fsuid != real_uid)
         die ("Unable to set fsuid (was %d)", (int)new_fsuid);
-
+      //去除bounding set 所有能力,这样新进程permitted一般为空
       /* We never need capabilities after execve(), so lets drop everything from the bounding set */
       drop_cap_bounding_set (TRUE);
-
+      //只设置一些必要的能力到当前进程的 effective,permitted
       /* Keep only the required capabilities for setup */
       set_required_caps ();
     }
-  else if (real_uid != 0 && has_caps ())
+  else if (real_uid != 0 && has_caps ()) 
     {
+      //不是root调用，但是有能力
       /* We have some capabilities in the non-setuid case, which should not happen.
          Probably caused by the binary being setcap instead of setuid which we
          don't support anymore */
       die ("Unexpected capabilities but not setuid, old file caps config?");
     }
-  else if (real_uid == 0)
+  else if (real_uid == 0) 
     {
+      //root调用,获取effective集能力
       /* If our uid is 0, default to inheriting all caps; the caller
        * can drop them via --cap-drop.  This is used by at least rpm-ostree.
        * Note this needs to happen before the argument parsing of --cap-drop.
@@ -2560,22 +2570,26 @@ main (int    argc,
    * right now flatpak's build runs bubblewrap --version.
    * https://github.com/projectatomic/bubblewrap/issues/185
    */
+  //打印版本
   if (argc == 2 && (strcmp (argv[1], "--version") == 0))
     print_version_and_exit ();
 
+  //获取调用进程的UID,GID
   real_uid = getuid ();
   real_gid = getgid ();
 
   /* Get the (optional) privileges we need */
+  //针对setuid的情况做能力限制
   acquire_privs ();
 
+  //设置之后,当前进程以及子进程将无法添加权限，但是可以去除权限
   /* Never gain any more privs during exec */
   if (prctl (PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0)
     die_with_error ("prctl(PR_SET_NO_NEW_PRIVS) failed");
 
   /* The initial code is run with high permissions
      (i.e. CAP_SYS_ADMIN), so take lots of care. */
-
+  //读取文件系统支持的最大uid,gid
   read_overflowids ();
 
   argv0 = argv[0];
@@ -2589,6 +2603,7 @@ main (int    argc,
   if (argc <= 0)
     usage (EXIT_FAILURE, stderr);
 
+  //解析参数, 解析后argc和argv是在沙箱要执行程序对应的参数数量和参数
   parse_args (&argc, (const char ***) &argv);
 
   /* suck the args into a cleanup_free variable to control their lifecycle */
@@ -2638,7 +2653,7 @@ main (int    argc,
   if (is_privileged && getuid () != 0 && opt_userns_fd == -1)
     opt_unshare_user = TRUE;
 #endif
-
+ //检测当前进程是否支持clone user
   if (opt_unshare_user_try &&
       stat ("/proc/self/ns/user", &sbuf) == 0)
     {
@@ -2660,6 +2675,7 @@ main (int    argc,
           max_user_ns = load_file_at (AT_FDCWD, "/proc/sys/user/max_user_namespaces");
           if (max_user_ns != NULL && strcmp(max_user_ns, "0\n") == 0)
             disabled = TRUE;
+          /* 如果允许最大的命名空间数量是0 那么说明不支持unshare user */
         }
 
       /* Debian lets you disable *unprivileged* user namespaces. However this is not
@@ -2675,6 +2691,7 @@ main (int    argc,
 
   __debug__ (("Creating root mount point\n"));
 
+  //如果没有使用 --uid --gid,设置沙箱内的uid gid，沙箱内的uid gid和调用者的uid gid一致
   if (opt_sandbox_uid == -1)
     opt_sandbox_uid = real_uid;
   if (opt_sandbox_gid == -1)
@@ -2779,6 +2796,7 @@ main (int    argc,
       create_pid_socketpair (intermediate_pids_sockets);
     }
 
+  //创建命名空间
   pid = raw_clone (clone_flags, NULL);
   if (pid == -1)
     {
@@ -2806,7 +2824,7 @@ main (int    argc,
           pid = read_pid_from_socket (intermediate_pids_sockets[0]);
           close (intermediate_pids_sockets[0]);
         }
-
+      //获取子进程命名空间的id
       /* Discover namespace ids before we drop privileges */
       namespace_ids_read (pid);
 
@@ -2831,9 +2849,11 @@ main (int    argc,
         die_with_error ("Setting userns2 failed");
 
       /* We don't need any privileges in the launcher, drop them immediately. */
+      /* 父进程拿掉所有权限 */
       drop_privs (FALSE, FALSE);
 
       /* Optionally bind our lifecycle to that of the parent */
+      /* 当父进程死亡， 当前进程也会退出 */
       handle_die_with_parent ();
 
       if (opt_info_fd != -1)
@@ -2864,7 +2884,7 @@ main (int    argc,
       res = write (child_wait_fd, &val, 8);
       /* Ignore res, if e.g. the child died and closed child_wait_fd we don't want to error out here */
       close (child_wait_fd);
-
+      //回收沙箱 TODO
       return monitor_child (event_fd, pid, setup_finished_pipe[0]);
     }
 
@@ -2914,6 +2934,7 @@ main (int    argc,
     close (opt_json_status_fd);
 
   /* Wait for the parent to init uid/gid maps and drop caps */
+  // 这里会阻塞，直到父进程向eventfd写
   res = read (child_wait_fd, &val, 8);
   close (child_wait_fd);
 
@@ -2933,6 +2954,7 @@ main (int    argc,
       /* In the unprivileged case we have to write the uid/gid maps in
        * the child, because we have no caps in the parent */
 
+      /* 如果调用不是setuid模式, 并且调用了unshare user(调用者不是root) */
       if (opt_needs_devpts)
         {
           /* This is a bit hacky, but we need to first map the real uid/gid to
@@ -2951,15 +2973,18 @@ main (int    argc,
   old_umask = umask (0);
 
   /* Need to do this before the chroot, but after we're the real uid */
+  /*获取软连接的绝对路径*/
   resolve_symlinks_in_ops ();
 
   /* Mark everything as slave, so that we still
    * receive mounts from the real root, but don't
    * propagate mounts to the real root. */
+  /*将命名空间的根设置为slave模式，防止挂载操作传播到父命名空间*/
   if (mount (NULL, "/", NULL, MS_SILENT | MS_SLAVE | MS_REC, NULL) < 0)
     die_with_error ("Failed to make / slave");
 
   /* Create a tmpfs which we will use as / in the namespace */
+  /* 挂载tmpfs在 /tmp 作为工作目录*/
   if (mount ("tmpfs", base_path, "tmpfs", MS_NODEV | MS_NOSUID, NULL) != 0)
     die_with_error ("Failed to mount tmpfs");
 
@@ -2967,7 +2992,8 @@ main (int    argc,
 
   /* Chdir to the new root tmpfs mount. This will be the CWD during
      the entire setup. Access old or new root via "oldroot" and "newroot". */
-  if (chdir (base_path) != 0)
+  /* 切换到工作目录 */
+  if (chdir (base_path) != 0) 
     die_with_error ("chdir base_path");
 
   /* We create a subdir "$base_path/newroot" for the new root, that
@@ -2988,6 +3014,7 @@ main (int    argc,
   if (pivot_root (base_path, "oldroot"))
     die_with_error ("pivot_root");
 
+/* pivot_root并没有修改当前调用进程的工作目录，通常需要使用chdir("/")来实现切换到新的root mount的根目录 */
   if (chdir ("/") != 0)
     die_with_error ("chdir / (base path)");
 
@@ -3050,6 +3077,8 @@ main (int    argc,
   if (umount2 ("oldroot", MNT_DETACH))
     die_with_error ("unmount old root");
 
+  /* 这时/newroot已经构建好了， 需要将/newroot换为新的根 */
+
   /* This is our second pivot. It's like we're a Silicon Valley startup flush
    * with cash but short on ideas!
    *
@@ -3088,6 +3117,10 @@ main (int    argc,
       (ns_uid != opt_sandbox_uid || ns_gid != opt_sandbox_gid) &&
       opt_userns_block_fd == -1)
     {
+      /*因为dev mount需要沙箱内root用户， 当时映射时临时将沙箱内都映射成root
+      现在再clone一个子user namespace 恢复正常的用户(uid,gid map只能写一次)
+      */
+
       /* Now that devpts is mounted and we've no need for mount
          permissions we can create a new userspace and map our uid
          1:1 */
@@ -3122,6 +3155,11 @@ main (int    argc,
 
   umask (old_umask);
 
+  /*尝试切换cwd 
+  1. 如果有 --chdir 切换到对应目录
+  2. 如果创建newroot之前的old_cwd还存在 切换到old_cwd
+  3. 否则切换到家目录 
+  */
   new_cwd = "/";
   if (opt_chdir_path)
     {
