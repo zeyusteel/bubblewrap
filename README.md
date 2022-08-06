@@ -3,7 +3,7 @@ Bubblewrap
 
 bwrap源码注释,尽量保留源代码的结构  
 `demos/my-demos`下有bwrap使用过的一些函数调用demo,方便理解  
-[之前总结Linux能力相关文档](https://zeyusteel.github.io/2022/06/11/Linux-Capabilities/)
+[之前总结Linux能力相关文档](https://zeyusteel.github.io/2022/06/11/linux-capabilities/)
 
 --------------
 
