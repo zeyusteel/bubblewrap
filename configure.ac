@@ -1,27 +1,27 @@
-AC_PREREQ([2.63])
-AC_INIT([bubblewrap], [0.7.0], [atomic-devel@projectatomic.io])
-AC_CONFIG_HEADER([config.h])
-AC_CONFIG_MACRO_DIR([m4])
-AC_CONFIG_AUX_DIR([build-aux])
+AC_PREREQ([2.63]) # 要求autoconf最低版本,必须在AC_INIT之前定义
+AC_INIT([bubblewrap], [0.7.0], [atomic-devel@projectatomic.io]) # 软件名称、版本、邮箱
+AC_CONFIG_HEADER([config.h]) # 最后生成config.h文件，以便autoheader命令使用
+AC_CONFIG_MACRO_DIR([m4])    # 传入宏路径,指定dir作为额外的Autoconf宏的定位
+AC_CONFIG_AUX_DIR([build-aux]) # 辅助构建工具所在的目录,通常命名为build-aux
 
-AC_USE_SYSTEM_EXTENSIONS
+AC_USE_SYSTEM_EXTENSIONS # 使用一些扩展,会默认启用一些宏
 
-AM_INIT_AUTOMAKE([1.11 -Wno-portability foreign no-define tar-ustar no-dist-gzip dist-xz])
+AM_INIT_AUTOMAKE([1.11 -Wno-portability foreign no-define tar-ustar no-dist-gzip dist-xz]) # 定义automake版本和参数
 AM_MAINTAINER_MODE([enable])
-AM_SILENT_RULES([yes])
+AM_SILENT_RULES([yes]) #精简编译输出
 
 AC_SYS_LARGEFILE
 
-AC_PROG_CC
-AM_PROG_CC_C_O
+AC_PROG_CC      # 检查gcc
+AM_PROG_CC_C_O  # 检查gcc -c -o 参数
 PKG_PROG_PKG_CONFIG([])
 
-AC_CHECK_HEADERS([sys/capability.h], [], [AC_MSG_ERROR([*** POSIX caps headers not found])])
+AC_CHECK_HEADERS([sys/capability.h], [], [AC_MSG_ERROR([*** POSIX caps headers not found])]) # 检查头文件
 
 AC_ARG_ENABLE(man,
               [AS_HELP_STRING([--enable-man],
                               [generate man pages [default=auto]])],,
-              enable_man=maybe)
+              enable_man=maybe) # 是否生成man文档,会在configure中新增一个--enbale-man
 
 AS_IF([test "$enable_man" != no], [
   AC_PATH_PROG([XSLTPROC], [xsltproc], [])
@@ -34,13 +34,13 @@ AS_IF([test "$enable_man" != no], [
     enable_man=yes
   ])
 ])
-AM_CONDITIONAL(ENABLE_MAN, test "$enable_man" != no)
+AM_CONDITIONAL(ENABLE_MAN, test "$enable_man" != no) # 让Makefile.am中使用ENABLE_MAN条件
 
 AC_ARG_WITH([bash-completion-dir],
     AS_HELP_STRING([--with-bash-completion-dir[=PATH]],
         [Install the bash auto-completion script in this directory. @<:@default=yes@:>@]),
     [],
-    [with_bash_completion_dir=yes])
+    [with_bash_completion_dir=yes]) # configure中使用--with-bash-completion-dir=PATH,默认PATH是yes
 
 AS_IF([test "x$with_bash_completion_dir" = "xyes"],
   [
@@ -52,8 +52,8 @@ AS_IF([test "x$with_bash_completion_dir" = "xyes"],
     BASH_COMPLETION_DIR="$with_bash_completion_dir"
   ])
 
-AC_SUBST([BASH_COMPLETION_DIR])
-AM_CONDITIONAL([ENABLE_BASH_COMPLETION],[test "x$with_bash_completion_dir" != "xno"])
+AC_SUBST([BASH_COMPLETION_DIR]) # Makefile.am添加这变量
+AM_CONDITIONAL([ENABLE_BASH_COMPLETION],[test "x$with_bash_completion_dir" != "xno"]) # Makefile.am添加条件变量
 
 AC_ARG_WITH([zsh-completion-dir],
     AS_HELP_STRING([--with-zsh-completion-dir[=PATH]],
@@ -110,7 +110,7 @@ CC_CHECK_FLAGS_APPEND([WARN_CFLAGS], [CFLAGS], [\
 ])
 AC_SUBST(WARN_CFLAGS)
 
-AC_CHECK_LIB(cap, cap_from_text)
+AC_CHECK_LIB(cap, cap_from_text) # 检查libcap是否存在, 结果在ac_cv_lib_cap_cap_from_text变量
 
 AS_IF([test "$ac_cv_lib_cap_cap_from_text" != "yes"],
   [AC_MSG_ERROR([*** libcap requested but not found])])
@@ -138,13 +138,13 @@ AS_IF([ test "x$enable_require_userns" = "xyes" ], [
         AC_DEFINE(ENABLE_REQUIRE_USERNS, 1, [Define if userns should be used by default in suid mode])
      ])
 
-AC_PROG_AWK
-AC_REQUIRE_AUX_FILE([tap-driver.sh])
+AC_PROG_AWK # 检查awk是否存在
+AC_REQUIRE_AUX_FILE([tap-driver.sh]) # 声明文件在上述定义的文件夹中必须存在
 
 AC_CONFIG_FILES([
 Makefile
 ])
-AC_OUTPUT
+AC_OUTPUT # 生成config.status并启动它。configure.ac应该以调用此宏结束
 
 echo "
     bubblewrap $VERSION
