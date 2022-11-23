@@ -110,7 +110,7 @@ CC_CHECK_FLAGS_APPEND([WARN_CFLAGS], [CFLAGS], [\
 ])
 AC_SUBST(WARN_CFLAGS)
 
-AC_CHECK_LIB(cap, cap_from_text) # 检查libcap是否存在, 结果在ac_cv_lib_cap_cap_from_text变量
+AC_CHECK_LIB(cap, cap_from_text) # 检查libcap是否存在,并且在链接时自动把libcap链接上,结果在ac_cv_lib_cap_cap_from_text变量
 
 AS_IF([test "$ac_cv_lib_cap_cap_from_text" != "yes"],
   [AC_MSG_ERROR([*** libcap requested but not found])])

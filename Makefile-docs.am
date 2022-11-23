@@ -8,7 +8,7 @@ XSLTPROC_FLAGS = \
 	--stringparam man.authors.section.enabled 0 \
 	--stringparam man.copyright.section.enabled 0
 
-.xml.1:
+.xml.1: # 等价于 %1:%xml, $< 表示获取第一个依赖,也就是bwrap.xml
 	$(XSLTPROC) $(XSLTPROC_FLAGS) http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
 
 if ENABLE_MAN
