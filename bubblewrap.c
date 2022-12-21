@@ -732,6 +732,10 @@ has_caps (void)
   return data[0].permitted != 0 || data[1].permitted != 0;
 }
 
+/* 通过prctl设置ambient,或者移除bounding集的能力
+ * caps是一个只有两个成员的数组，分别存放低32位和高32位能力集的mask,如果一个能力在caps中，那么keep位置1
+ */
+
 /* Most of the code here is used both to add caps to the ambient capabilities
  * and drop caps from the bounding set.  Handle both cases here and add
  * drop_cap_bounding_set/set_ambient_capabilities wrappers to facilitate its usage.
@@ -835,7 +839,7 @@ acquire_privs (void)
       //设置特权标志
       is_privileged = TRUE;
       /* clone操作之前保证以euid=0运行,保证clone的命名空间的拥有者是root,这样
-       * 其他用户无法用ptrace追踪，clone之后会完全以当前用户运行
+       * 用户无法用ptrace追踪，clone之后会完全以当前用户运行
        * 但是不希望在clone前滥用euid=0的权限所以,通过setfsuid将文件系统权限收缩回real_uid
        */
       
@@ -860,13 +864,13 @@ acquire_privs (void)
       //去除bounding set 所有能力,这样新进程permitted一般为空
       /* We never need capabilities after execve(), so lets drop everything from the bounding set */
       drop_cap_bounding_set (TRUE);
-      //只设置一些必要的能力到当前进程的 effective,permitted
+      //只设置一些必要的能力到当前进程的 effective,permitted,其他由setuid获取的能力都将被清除
       /* Keep only the required capabilities for setup */
       set_required_caps ();
     }
   else if (real_uid != 0 && has_caps ()) 
     {
-      //不是root调用，但是有能力
+      //不是root调用，也没有setuid 0, 但是有能力，可能是由于对bwrap二进制文件进行了setcap
       /* We have some capabilities in the non-setuid case, which should not happen.
          Probably caused by the binary being setcap instead of setuid which we
          don't support anymore */

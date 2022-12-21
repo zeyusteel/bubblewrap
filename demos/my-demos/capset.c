@@ -13,15 +13,7 @@
 #define _CAP_AMBIENT        3 
 #define _CAP_BOUND          4
 
-extern int errno;
-  
-void whoami(void)
-{
-    printf("uid=%i  euid=%i  gid=%i\n", getuid(), geteuid(), getgid());
-}
- 
-
-static int _cap_set(const int *cap_flag, int cap_flag_size,
+int cap_set(const int *cap_flag, int cap_flag_size,
                     const cap_value_t *cap_list, int cap_list_size,
                     cap_flag_value_t set)
 {
@@ -108,41 +100,5 @@ static int _cap_set(const int *cap_flag, int cap_flag_size,
         }
     }
  
-    return 0;
-}
-
-void print_all_cap();
-  
-int main(int argc, char **argv)
-{
-    int stat;
-    whoami();
-
-    stat = setuid(geteuid());
-    pid_t parentPid = getpid();
- 
-    if(!parentPid)
-        return 1;
-    
-    int capType[] = {_CAP_EFFECTIVE, _CAP_INHERITABLE};
-    cap_value_t capList[] = {CAP_SETUID, CAP_SETGID};
-
-    int rc = _cap_set(capType, sizeof(capType) / sizeof(capType[0]), 
-                        capList, sizeof(capList) / sizeof(capList[0]), CAP_CLEAR);
-
-    printf("before set:\n");
-    print_all_cap();
-
-    int _capType[] = {_CAP_EFFECTIVE, _CAP_INHERITABLE, _CAP_AMBIENT};
-
-    rc = _cap_set(_capType, sizeof(_capType) / sizeof(_capType[0]), 
-                        capList, sizeof(capList) / sizeof(capList[0]), CAP_SET);
-
-
-    printf("%d\n", rc);
-
-    printf("after set:\n");
-    print_all_cap();
-
     return 0;
 }

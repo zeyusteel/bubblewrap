@@ -159,7 +159,6 @@ static void cap_bound_dump(void)
     printf("\n");
 }
 
-void print_all_cap(void);
 void print_all_cap(void)
 {
     cap_t cap = cap_get_proc();
@@ -192,33 +191,3 @@ void print_all_cap(void)
     }
     printf("\n");
 }
-
-/*
-int main()
-{
-    printf("type 1 : \n");
-    print_cap_sys_call(); 
-    printf("\n");
-
-#if 0 
-    printf("type 2 : \n");
-    print_cap_to_text();
-    printf("\n");
-
-    printf("type 3 : \n");
-    print_cap_get_flag();
-    printf("\n");
-
-    printf("ambient : \n");
-    cap_ambient_dump();
-    printf("\n");
-
-
-    printf("bound : \n");
-    cap_bound_dump();
-    printf("\n");
-    print_all_cap();
-#endif
-}
-
-*/
