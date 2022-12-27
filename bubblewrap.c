@@ -528,7 +528,7 @@ monitor_child (int event_fd, pid_t child_pid, int setup_finished_fd)
       /* Always read from the eventfd first, if pid 2 died then pid 1 often
        * dies too, and we could race, reporting that first and we'd lose
        * the real exit status. */
-      if (event_fd != -1)
+      if (event_fd != -1) //当沙箱内启用1号进程作为init时默认先捕捉2号进程退出状态
         {
           s = read (event_fd, &val, 8);
           if (s == -1 && errno != EINTR && errno != EAGAIN)
@@ -2665,7 +2665,7 @@ main (int    argc,
 
   argv0 = argv[0];
 
-  if (isatty (1))
+  if (isatty (1)) //如果标准输出是指向一个终端,就获取该终端的路径
     host_tty_dev = ttyname (1);
 
   argv++;
@@ -2678,7 +2678,7 @@ main (int    argc,
   parse_args (&argc, (const char ***) &argv);
 
   /* suck the args into a cleanup_free variable to control their lifecycle */
-  args_data = opt_args_data;
+  args_data = opt_args_data; // 解析 --args fd 时分配的内存,通过args_data释放
   opt_args_data = NULL;
 
   if ((requested_caps[0] || requested_caps[1]) && is_privileged)
@@ -2693,7 +2693,7 @@ main (int    argc,
   if (opt_userns_fd != -1 && opt_unshare_user)
     die ("--userns not compatible --unshare-user");
 
-  if (opt_userns_fd != -1 && opt_unshare_user_try)
+  if (opt_userns_fd != -1 && opt_unshare_user_try) //unshare-user-try会将opt_unshare_user置1
     die ("--userns not compatible --unshare-user-try");
 
   /* Technically using setns() is probably safe even in the privileged
@@ -2716,7 +2716,7 @@ main (int    argc,
 
   /* We have to do this if we weren't installed setuid (and we're not
    * root), so let's just DWIM */
-  if (!is_privileged && getuid () != 0 && opt_userns_fd == -1)
+  if (!is_privileged && getuid () != 0 && opt_userns_fd == -1) //没setuid也不是root调用也没setns，那么想在子命名空间具有挂载等能力就必须clone_newuser
     opt_unshare_user = TRUE;
 
 #ifdef ENABLE_REQUIRE_USERNS
@@ -2799,6 +2799,8 @@ main (int    argc,
 
   __debug__ (("creating new namespace\n"));
 
+  /* 当开启pidns并且沙箱进程不需要是1号进程时，沙箱会创建一个1号进程用于回收子进程,
+   * 这时当回收到真正要在沙箱内执行的进程时会通过event_fd发送消息给monitor */
   if (opt_unshare_pid && !opt_as_pid_1)
     {
       event_fd = eventfd (0, EFD_CLOEXEC | EFD_NONBLOCK);
@@ -2859,6 +2861,10 @@ main (int    argc,
       die_with_error ("Joining specified user namespace failed");
     }
 
+  /* 进程所属的PID namespace 在它创建的时候就确定了，不能更改
+   * 所以调用unshare 和setns后，原进程还是属于老的PID namespace，新fork出来的进程才属于新的PID namespace
+   * 这样父进程需要获取孙子进程pid并回收
+   */
   /* Sometimes we have uninteresting intermediate pids during the setup, set up code to pass the real pid down */
   if (opt_pidns_fd != -1)
     {
@@ -2962,6 +2968,7 @@ main (int    argc,
       return monitor_child (event_fd, pid, setup_finished_pipe[0]);
     }
 
+  /* 处理setns到特定pidns情况,需要重新fork */
   if (opt_pidns_fd > 0)
     {
       if (setns (opt_pidns_fd, CLONE_NEWPID) != 0)

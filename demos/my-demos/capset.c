@@ -95,7 +95,6 @@ int cap_set(const int *cap_flag, int cap_flag_size,
                     perror("cap_set_ambient fail");
                     return -1;
                 }
-                printf("am:%d\n", am);
             }
         }
     }

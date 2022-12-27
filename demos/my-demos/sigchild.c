@@ -13,16 +13,17 @@ block_sigchild (void)
   sigemptyset (&mask);
   sigaddset (&mask, SIGCHLD);
 
+#if 1
   if (sigprocmask (SIG_BLOCK, &mask, NULL) == -1) {
       printf("%s \n",__func__);
     return;
   }
+#endif
+}
 
-  /* Reap any outstanding zombies that we may have inherited */
-  while (waitpid (-1, &status, WNOHANG) > 0) {
-      printf("wtf\n");
-      ;
-  }
+void test(int sig)
+{
+	printf("-----------------signal :%d\n", sig);
 }
 
 int main(int argc, char const *argv[])
@@ -30,12 +31,17 @@ int main(int argc, char const *argv[])
     pid_t pid = fork();
 
     if (pid > 0) {
-        printf("parent %d\n", pid);
-        sleep(1);
+        signal(SIGCHLD, test);
+        printf("i am parent %d\n", getpid());
         block_sigchild ();
+        wait(NULL); //屏蔽SIGCHLD也不影响进程回收
+        printf("parent exit\n");
+        exit(0);
     } else {
+        sleep(3);
         printf("i am child %d\n", getpid());
-        exit(1);
+        printf("child exit\n");
+        exit(0);
     }
 
     /* code */
